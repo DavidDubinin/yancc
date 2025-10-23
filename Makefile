@@ -1,8 +1,10 @@
+NAME := yancc
+
 CXX :=g++
 CXXFLAGS := -Wall -Wextra -Isrc/include
 LDFLAGS := -lb15fdrv
 
-TARGET := build/bin/yancc
+TARGET := build/bin/$(NAME)
 SRC := $(wildcard src/*.cpp)
 OBJ := $(SRC:src/%.cpp=build/%.o)
 
