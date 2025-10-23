@@ -1,3 +1,6 @@
 *.out
 *.o
+*.elf
+*.bin
+yancc
 .vscode
