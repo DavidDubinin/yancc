@@ -9,7 +9,6 @@ OBJ := $(SRC:src/%.cpp=build/%.o)
 all: $(TARGET)
 
 $(TARGET): $(OBJ)
-	mkdir -p $(dir $(TARGET))
 	$(CXX) $(OBJ) -o $(TARGET) $(LDFLAGS)
 
 build/%.o: src/%.cpp
