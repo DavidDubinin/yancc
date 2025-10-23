@@ -12,10 +12,12 @@ $(TARGET): $(OBJ)
 	$(CXX) $(OBJ) -o $(TARGET) $(LDFLAGS)
 
 build/%.o: src/%.cpp
+	@mkdir -p build/bin
 	$(CXX) $(CXXFLAGS) $< -c -o $@
-	
+
 clean:
 	rm -f $(OBJ) $(TARGET)
+	rmdir -p build/bin
 
 run: $(TARGET)
 	$(TARGET)
