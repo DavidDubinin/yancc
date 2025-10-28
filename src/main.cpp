@@ -23,7 +23,6 @@ void writeData(B15F& drv, volatile uint8_t value){
 void exitHandler(int sig){
     writeData(drv,0b0000);
     exit(sig);
-
 }
 
 int main(void){
