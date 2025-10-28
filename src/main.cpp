@@ -2,6 +2,8 @@
 #include <bitset>
 #include <b15f/b15f.h>
 
+B15F& drv = setup();
+
 B15F& setup(){
     B15F& drv = B15F::getInstance();
     drv.setRegister(&DDRA, 0b00001111);
@@ -16,9 +18,15 @@ void writeData(B15F& drv, volatile uint8_t value){
     drv.setRegister(&PORTA, value);
 }
 
+void exitHandler(int sig){
+    writeData(drv,0b0000);
+    exit(sig)
+
+}
 
 int main(void){
-    B15F& drv = setup();
+
+    signal(SIGINT, exitHandler);
 
     while(1){
         volatile uint8_t portA = drv.getRegister(&PORTA) ^ 0b1111;
