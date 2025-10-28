@@ -2,13 +2,15 @@
 #include <bitset>
 #include <b15f/b15f.h>
 
-B15F& drv = setup();
 
 B15F& setup(){
     B15F& drv = B15F::getInstance();
     drv.setRegister(&DDRA, 0b00001111);
     return drv;
 }
+
+
+B15F& drv = setup();
 
 uint8_t readData(B15F& drv){ 
     return (drv.getRegister(&PINA) >> 4); 
