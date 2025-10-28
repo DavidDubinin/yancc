@@ -26,7 +26,7 @@ int main(void){
         writeData(drv, portA);
 
         std::bitset<4> receivedData(readData(drv));
-        std::cout << "received: " << receivedData << "| sent: " << writingData << std::endl;
+        std::cout << "received: " << receivedData << " | sent: " << writingData << std::endl;
 
 
         drv.delay_ms(500);
