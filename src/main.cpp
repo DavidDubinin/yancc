@@ -9,7 +9,7 @@ B15F& setup(){
 }
 
 uint8_t readData(B15F& drv){ 
-    return (drv.getRegister(&PINA)); 
+    return (drv.getRegister(&PINA) >> 4); 
 }
 
 void writeData(B15F& drv, volatile uint8_t value){
@@ -22,10 +22,10 @@ int main(void){
 
     while(1){
         volatile uint8_t portA = drv.getRegister(&PORTA) ^ 0b1111;
-        std::bitset<8> writingData(portA);
+        std::bitset<4> writingData(portA);
         writeData(drv, portA);
 
-        std::bitset<8> receivedData(readData(drv));
+        std::bitset<4> receivedData(readData(drv));
         std::cout << "received: " << receivedData << " | sent: " << writingData << std::endl;
 
 
