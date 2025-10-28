@@ -21,10 +21,12 @@ int main(void){
     B15F& drv = setup();
 
     while(1){
-        writeData(drv, drv.getRegister(&PORTA) ^ 0b1111);
-        
+        volatile uint8_t portA = drv.getRegister(&PORTA) ^ 0b1111;
+        std::bitset<4> writingData(portA);
+        writeData(drv, portA);
+
         std::bitset<4> receivedData(readData(drv));
-        std::cout << receivedData << std::endl;
+        std::cout << "received: " << receivedData << "| sent: " << writingData << std::endl;
 
 
         drv.delay_ms(500);
