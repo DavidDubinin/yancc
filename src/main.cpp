@@ -1,4 +1,5 @@
 #include <iostream>
+#include <bitset>
 #include <b15f/b15f.h>
 
 B15F& setup(){
@@ -8,7 +9,7 @@ B15F& setup(){
 }
 
 uint8_t readData(B15F& drv){ 
-    return (drv.getRegister(&PORTA) << 4); 
+    return (drv.getRegister(&PORTA) >> 4); 
 }
 
 void writeData(B15F& drv, volatile uint8_t value){
@@ -21,8 +22,9 @@ int main(void){
 
     while(1){
         writeData(drv, drv.getRegister(&PORTA) ^ 0b1111);
-
-        std::cout << (int)readData(drv) << std::endl;
+        
+        std::bitset<4> receivedData(readData(drv));
+        std::cout << receivedData << std::endl;
 
 
         drv.delay_ms(500);
