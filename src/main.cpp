@@ -7,7 +7,10 @@ B15F& setup(){
     return drv;
 }
 
-uint8_t readData(B15F& drv){ return (drv.getRegister(&PORTA) >> 4); }
+uint8_t readData(B15F& drv){ 
+    std::cout << drv.getRegister(&PORTA);
+    return (drv.getRegister(&PORTA) >> 4); 
+}
 
 void writeData(B15F& drv, volatile uint8_t value){
     drv.setRegister(&PORTA, value);
@@ -18,12 +21,12 @@ int main(void){
     B15F& drv = setup();
 
     while(1){
-        writeData(drv, drv.getRegister(&PORTA) ^ 0b1111);;
+        writeData(drv, drv.getRegister(&PORTA) ^ 0b1111);
 
-        uint8_t data = readData(drv);
+        int8_t data = readData(drv);
 
         if(data){
-            std::cout << data << std::endl;
+            std::cout << (int)data << std::endl;
         }
 
         drv.delay_ms(500);
