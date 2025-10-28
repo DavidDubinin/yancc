@@ -9,7 +9,7 @@ B15F& setup(){
 }
 
 uint8_t readData(B15F& drv){ 
-    return (drv.getRegister(&PORTA) >> 4); 
+    return (drv.getRegister(&PORTA)); 
 }
 
 void writeData(B15F& drv, volatile uint8_t value){
