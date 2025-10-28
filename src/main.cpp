@@ -27,7 +27,6 @@ void exitHandler(int sig){
 }
 
 int main(void){
-
     signal(SIGINT, exitHandler);
 
     while(1){
