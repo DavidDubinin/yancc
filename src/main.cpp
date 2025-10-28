@@ -8,7 +8,6 @@ B15F& setup(){
 }
 
 uint8_t readData(B15F& drv){ 
-    std::cout << drv.getRegister(&PORTA);
     return (drv.getRegister(&PORTA) >> 4); 
 }
 
@@ -23,11 +22,7 @@ int main(void){
     while(1){
         writeData(drv, drv.getRegister(&PORTA) ^ 0b1111);
 
-        int8_t data = readData(drv);
-
-        if(data){
-            std::cout << (int)data << std::endl;
-        }
+        std::cout << (int)readData(drv) << std::endl;
 
         drv.delay_ms(500);
     }
