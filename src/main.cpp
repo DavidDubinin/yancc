@@ -5,7 +5,7 @@
 B15F* setup();
 
 //CONSTS
-constexpr std::bitset<4> SILLYSEQUENCE(1010);
+constexpr std::bitset<4> SILLYSEQUENCE(0b1010);
 B15F* drv = nullptr;
 
 B15F* setup(){
@@ -43,7 +43,8 @@ std::vector<std::bitset<4>> stringToNibbles(std::string& input){
 
     for(size_t i = 0; i < input.size(); i++){
         uint8_t byteData = (uint8_t)input.at(i);
-        std::bitset<4> nibble_lower(byteData & 0b00001111 );
+        
+        std::bitset<4> nibble_lower(byteData & 0b00001111);
         std::bitset<4> nibble_upper((byteData & 0b11110000) >> 4);
 
 
@@ -58,6 +59,11 @@ void sendStringNibbles(std::vector<std::bitset<4>>& data){
     for(std::bitset<4> bits : data){
         writeData(bits);
     }
+}
+
+
+std::string readStringNibbles(){
+    //TODO...
 }
 
 
@@ -76,7 +82,7 @@ int main(void){
         if(i%3==0 && i!=0){
             std::cout << std::endl;
         }
-        std::cout << nibble.test(3) << nibble.test(2) << nibble.test(1) << nibble.test(0) << std::endl;
+        std::cout << nibble.test(3) << nibble.test(2) << nibble.test(1) << nibble.test(0);
     }
 
     //sendStringNibbles(data);
