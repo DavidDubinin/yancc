@@ -1,4 +1,4 @@
-#include "fake15f.h"
+//#include "fake15f.h"
 #include <cstdint>
 #include <iostream>
 #include <bitset>
@@ -6,8 +6,10 @@
 #include <string>
 #include <thread>
 #include <vector>
-//#include <b15f/b15f.h>
+#include <b15f/b15f.h>
 
+int status = 0;
+std::bitset<4> upperNibble;
 //CONSTS
 constexpr std::bitset<4> SILLYSEQUENCE(0b1010);
 B15F* drv = nullptr;
@@ -20,6 +22,8 @@ B15F* setup(){
 
 
 uint8_t readNibble(){
+    uint8_t gelesen = (drv->getRegister(&PINA) >> 4);
+    drv->delay_ms(1);
     return (drv->getRegister(&PINA) >> 4);
 }
 
@@ -28,9 +32,12 @@ std::bitset<4> readNibbleBitset(){
 }
 
 void writeData(uint8_t value) {
-    uint8_t current = drv -> getRegister(&PORTA) & 0xF0; // RX
-    uint8_t newValue = current | (value & 0x0F); // + TX, nur 4 bits
-    drv -> setRegister(&PORTA, newValue);
+    uint8_t current = drv -> getRegister(&PINA) & 0xF0;
+    drv->delay_ms(1);
+
+    uint8_t output = value & 0x0F;
+    drv -> setRegister(&PORTA, current | output);
+    drv->delay_ms(1);
 }
 
 void writeData(std::bitset<4> value){
@@ -76,11 +83,16 @@ void sendStringNibbles(std::vector<std::bitset<4>>& data){
 
 std::string readStringNibbles(){
     std::string msg;
-    int status = 0; // 0 sucht nach SILLYSEQUENCE, 1=upperNibble, 2=lowerNibble
-    std::bitset<4> upperNibble;
+    //int status = 0; // 0 sucht nach SILLYSEQUENCE, 1=upperNibble, 2=lowerNibble
+    //std::bitset<4> upperNibble;
 
-    while(1) {
-        std::bitset<4> currentNibble = readNibbleBitset();
+    std::bitset<4> currentNibble = readNibbleBitset();
+    if (currentNibble.none()) {
+	    return "";
+    }
+
+//    while(1) {
+//        std::bitset<4> currentNibble = readNibbleBitset();
 
         switch(status) {
             case 0:
@@ -103,21 +115,24 @@ std::string readStringNibbles(){
 
                 if (byte == 0x00) {
                     std::cout << "msg::end;" << std::endl;
+		    status = 0;
                     return msg;
                 }
 
                 std::cout << "[ByteToChar]: " << int(byte) << " -> " << character << std::endl;
                 msg += character;
                 status = 0;
+		return msg;
                 break;
         }
+	return "";
     }
-}
+//}
 
 
 int main(void){
     signal(SIGINT, exitHandler);
-    drv = setup();
+    drv = &B15F::getInstance();
     drv->delay_ms(1300); // FAKE15, eigentlich unnötig aber bessere Ausgabe im Terminal
 
     std::cout << "Empfang wird gestartet..." << std::endl;
@@ -127,6 +142,7 @@ int main(void){
             if (!received.empty()) {
                 std::cout << "\n[RX] " << received << std::endl;
             }
+	    drv->delay_ms(10);
         }
     });
 
