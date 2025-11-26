@@ -20,18 +20,18 @@ B15F& drv = B15F::getInstance();
 
 //R/W++
 std::bitset<4> readNibble() {
-    uint8_t msg = drv.digitalRead0();
+    uint8_t msg = drv.getRegister(&PINA);
     return std::bitset<4>(msg >> 4);
 }
 
 void writeNibble(std::bitset<4> nibble) {
-    uint8_t status = drv.digitalRead0() & 0xF0;
-    drv.digitalWrite0(status | nibble.to_ulong());
+    uint8_t status = drv.getRegister(&PORTA) & 0xF0;
+    drv.setRegister(&PORTA, status | nibble.to_ulong());
 }
 
 void exitHandler(int sig){
     running = false;
-    drv.digitalWrite0(0x00);
+    drv.setRegister(&PORTA, 0x00);
     std::cout << "tschüss" << std::endl;
     exit(sig);
 }
@@ -116,7 +116,8 @@ void receiverThread() {
 int main(void){
     signal(SIGINT, exitHandler);
 
-    //setup();
+    //
+    // setup();
     std::cout << "'exit' um das Programm zu beeenden." << std::endl;
     drv.delay_ms(1300); // FAKE15, eigentlich unnötig aber bessere Ausgabe im Terminal
 
@@ -140,7 +141,7 @@ int main(void){
     running = false;
 
     if (receiver.joinable()) receiver.join();
-    drv.digitalWrite0(0x00);
+    drv.setRegister(&PORTA, 0x00);
 
     return 0;
 }
