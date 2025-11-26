@@ -8,155 +8,139 @@
 #include <vector>
 #include <b15f/b15f.h>
 
-int status = 0;
-std::bitset<4> upperNibble;
-//CONSTS
-constexpr std::bitset<4> SILLYSEQUENCE(0b1010);
-B15F* drv = nullptr;
+//CONSTS UND GLOBALE
+constexpr std::bitset<4> SILLYSEQUENCE(0b1010); // SYNC
+std::bitset<4> MSGEND(0); // 0000 am Ende, damit man erkennen kann, wann eine Nachricht zu Ende ist
+volatile bool running = true;
 
-B15F* setup(){
-    B15F& drv = B15F::getInstance();
-    drv.setRegister(&DDRA, 0b00001111);
-    return &drv;
+B15F& drv = B15F::getInstance();
+//void setup() {
+//    drv.setRegister(&DDRA, 0b00001111); // vier Bits Input / 4 Bits Output
+//}
+
+//R/W++
+std::bitset<4> readNibble() {
+    uint8_t msg = drv.digitalRead0();
+    return std::bitset<4>(msg >> 4);
 }
 
-
-uint8_t readNibble(){
-    uint8_t gelesen = (drv->getRegister(&PINA) >> 4);
-    drv->delay_ms(1);
-    return (drv->getRegister(&PINA) >> 4);
-}
-
-std::bitset<4> readNibbleBitset(){
-    return std::bitset<4>(drv->getRegister(&PINA) >> 4);
-}
-
-void writeData(uint8_t value) {
-    uint8_t current = drv -> getRegister(&PINA) & 0xF0;
-    drv->delay_ms(1);
-
-    uint8_t output = value & 0x0F;
-    drv -> setRegister(&PORTA, current | output);
-    drv->delay_ms(1);
-}
-
-void writeData(std::bitset<4> value){
-    writeData(value.to_ulong());
+void writeNibble(std::bitset<4> nibble) {
+    uint8_t status = drv.digitalRead0() & 0xF0;
+    drv.digitalWrite0(status | nibble.to_ulong());
 }
 
 void exitHandler(int sig){
-    writeData(0b0000);
+    running = false;
+    drv.digitalWrite0(0x00);
+    std::cout << "tschüss" << std::endl;
     exit(sig);
 }
 
+std::vector<std::bitset<4>> stringToNibbles(const std::string& input){
+    std::vector<std::bitset<4>> nibbles;
 
-std::vector<std::bitset<4>> stringToNibbles(std::string& input){
-    std::vector<std::bitset<4>> stringNibbles;
-    stringNibbles.reserve(3*input.size() + 1); // hab hier +1 gemacht
+    for(char ch : input) {
+        uint8_t byte = (uint8_t)ch;
+        std::bitset<4> upper_nibble ((byte >> 4) & 0x0F); // xxxxXXXX
+        std::bitset<4> lower_nibble (byte & 0x0F); // XXXXxxxx
 
-    for(size_t i = 0; i < input.size(); i++){
-        uint8_t byteData = (uint8_t)input.at(i);
-
-        std::bitset<4> nibble_lower(byteData & 0b00001111);
-        std::bitset<4> nibble_upper((byteData & 0b11110000) >> 4);
-
-
-        stringNibbles.push_back(SILLYSEQUENCE);
-        stringNibbles.push_back(nibble_upper);
-        stringNibbles.push_back(nibble_lower);
+        nibbles.push_back(SILLYSEQUENCE);
+        nibbles.push_back(upper_nibble);
+        nibbles.push_back(lower_nibble);
     }
 
-    stringNibbles.push_back(SILLYSEQUENCE);
-    stringNibbles.push_back(std::bitset<4>(0)); //NIBBLER_UPER
-    stringNibbles.push_back(std::bitset<4>(0)); //NIBBLE_LOWER
+    nibbles.push_back(SILLYSEQUENCE);
+    nibbles.push_back(MSGEND/*upper*/);
+    nibbles.push_back(MSGEND/*lower*/);
 
-    return stringNibbles;
+    return nibbles;
 }
 
-void sendStringNibbles(std::vector<std::bitset<4>>& data){
-    for(std::bitset<4> bits : data){
-        writeData(bits);
-        drv -> delay_ms(10);
+void sendNibbles(const std::vector<std::bitset<4>>& nibbles){
+    for(const auto& nibble : nibbles){
+        writeNibble(nibble);
+        drv.delay_ms(5);
     }
 }
 
 
-std::string readStringNibbles(){
-    std::string msg;
-    //int status = 0; // 0 sucht nach SILLYSEQUENCE, 1=upperNibble, 2=lowerNibble
-    //std::bitset<4> upperNibble;
+std::string receiveStringMsg() {
+    static int status = 0; //[0] = wartet auf silly | [1] = read upper ibble | [2] = read lower
+    static std::bitset<4> upper_nibble;
+    static std::bitset<4> lower_nibble;
+    static std::string msg;
 
-    std::bitset<4> currentNibble = readNibbleBitset();
-    if (currentNibble.none()) {
-	    return "";
-    }
+    std::bitset<4> current_nibble = readNibble();
+    if (current_nibble.none()) return "";
 
-//    while(1) {
-//        std::bitset<4> currentNibble = readNibbleBitset();
+    switch(status) {
+        case 0:
+            if (current_nibble == SILLYSEQUENCE) {
+                status = 1;
+            }
+            break;
+        case 1:
+            upper_nibble = current_nibble;
+            status = 2;
+            break;
+        case 2:
+            lower_nibble = current_nibble;
 
-        switch(status) {
-            case 0:
-                if (currentNibble == SILLYSEQUENCE) {
-                    status = 1;
-                    std::cout << "SILLYSEQUENCE empfangen, upperNibble folgt" << std::endl;
-                }
-                break;
-            case 1:
-                upperNibble = currentNibble;
-                status = 2;
-                std::cout << "upperNibble empfangen: " << upperNibble << " folgt lowerNibble." << std::endl;
-                break;
-            case 2:
-                std::bitset<4> lowerNibble = currentNibble;
-                std::cout << "lowerNibble empfanfen: " << lowerNibble << std::endl;
-
-                uint8_t byte = (upperNibble.to_ulong() << 4) | lowerNibble.to_ulong();
-                char character = (char)byte;
-
-                if (byte == 0x00) {
-                    std::cout << "msg::end;" << std::endl;
-		    status = 0;
-                    return msg;
-                }
-
-                std::cout << "[ByteToChar]: " << int(byte) << " -> " << character << std::endl;
-                msg += character;
+            if (upper_nibble.none() && lower_nibble.none()) {
+                std::string msg_full = msg;
+                msg.clear();
                 status = 0;
-		return msg;
-                break;
-        }
-	return "";
+                return msg_full;
+            }
+
+            uint8_t byte = (upper_nibble.to_ulong() << 4) | lower_nibble.to_ulong();
+            msg += (char)byte;
+            status = 0;
+            break;
     }
-//}
+    return "";
+}
+
+void receiverThread() {
+    while(running) {
+        std::string msg = receiveStringMsg();
+        if (!msg.empty()) {
+            std::cout << "\n[RX] " << msg << std::endl;
+            std::cout << "TX >> " << std::flush;
+        }
+        drv.delay_ms(1);
+    }
+}
 
 
 int main(void){
     signal(SIGINT, exitHandler);
-    drv = &B15F::getInstance();
-    drv->delay_ms(1300); // FAKE15, eigentlich unnötig aber bessere Ausgabe im Terminal
+
+    //setup();
+    std::cout << "'exit' um das Programm zu beeenden." << std::endl;
+    drv.delay_ms(1300); // FAKE15, eigentlich unnötig aber bessere Ausgabe im Terminal
 
     std::cout << "Empfang wird gestartet..." << std::endl;
-    std::thread receiver([](){
-        while(1) {
-            std::string received = readStringNibbles();
-            if (!received.empty()) {
-                std::cout << "\n[RX] " << received << std::endl;
-            }
-	    drv->delay_ms(10);
-        }
-    });
+    std::thread receiver(receiverThread);
 
     std::string inputString;
-    while(1) {
-        std::cout << "INPUT STRING: ";
-        std::getline(std::cin, inputString);
-
-        if (inputString == "exit") break;
-
-        std::vector<std::bitset<4>> daten = stringToNibbles(inputString);
-        sendStringNibbles(daten);
-        std::cout << "[TX] Gesendet: " << inputString << std::endl;
+    while(running) {
+        std::cout << "TX >> ";
+        if (!std::getline(std::cin, inputString)) break;
+        if (inputString == "exit") {
+            running = false;
+            break;
+        }
+        if (!inputString.empty()) {
+            auto nibbles = stringToNibbles(inputString);
+            sendNibbles(nibbles);
+            std::cout << "[TX] Nachricht gesendet: " << inputString << std::endl;
+        }
     }
-    receiver.detach();
+    running = false;
+
+    if (receiver.joinable()) receiver.join();
+    drv.digitalWrite0(0x00);
+
     return 0;
 }
