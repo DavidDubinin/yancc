@@ -1,13 +1,11 @@
 #include <iostream>
 #include <b15f/b15f.h>
 #include <cstdint>
-#include <sys/types.h>
 #include <vector>
 
 B15F& drv = B15F::getInstance();
 void setup() {
     drv.setRegister(&DDRA, 0x0F);
-    drv.setRegister(&DDRA, 0x00);
     drv.delay_ms(100);
 }
 
@@ -52,7 +50,9 @@ int main() {
     setup();
 
     while(1) {
-        //MUSSGEHENFUCKSWT
         // TODO: Schleife, die nach Input fragt und string in Nibble umwandelt. Danach kommt das Senden usw.
+        std::cout << "Geben Sie eine Nachricht an: " << std::endl;
+        std::string input;
+        std::getline(std::cin, input);
     }
 }
