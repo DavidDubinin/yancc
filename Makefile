@@ -4,7 +4,7 @@ CXX :=g++
 CXXFLAGS := -Wall -Wextra -Isrc/include
 LDFLAGS := -lb15fdrv
 
-FAKE_CXXFLAGS := -Wall -Isrc/include
+FAKE_CXXFLAGS := -std=c++11 -Wall -Isrc/include
 FAKE_LDFLAGS := -pthread
 FAKE_TARGET := build/bin/$(NAME)_fake15
 
@@ -22,7 +22,7 @@ $(FAKE_TARGET): $(OBJ)
 
 build/%.o: src/%.cpp
 	@mkdir -p build/bin
-	$(CXX) $(CXXFLAGS) $< -c -o $@
+	$(CXX) $(FAKE_CXXFLAGS) $< -c -o $@
 
 clean:
 	rm -f $(OBJ) $(TARGET) $(FAKE_TARGET)
