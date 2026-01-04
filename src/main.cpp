@@ -12,16 +12,19 @@
 
 B15F& drv = B15F::getInstance();
 
-constexpr uint8_t TX_DATA_MASK = 0x07;
+constexpr uint8_t TX_DATA_BITS = 0x07;
 constexpr uint8_t TX_CLOCK_BIT = 0x08;
+constexpr uint8_t RX_DATA_BITS = 0x70;
+constexpr uint8_t RX_CLOCK_BIT = 0x80;
 constexpr uint8_t RX_DATA_SHIFT = 4;
+constexpr uint8_t OUTPUT_MASK = 0x0F;
+constexpr uint8_t INPUT_MASK = 0xF0;
 
 enum class FrameType : uint8_t {
     START = 0xE0,
     END = 0xE1,
     ACK = 0xE2,
-    NAK = 0xE3,
-    REQ = 0xE4
+    NAK = 0xE3
 };
 
 constexpr size_t BLOCK_SIZE = 64;
@@ -36,7 +39,7 @@ struct Block {
 };
 
 void setup() {
-    drv.setRegister(&DDRA, 0x0F);
+    drv.setRegister(&DDRA, OUTPUT_MASK);
     drv.delay_ms(100);
 }
 
@@ -55,47 +58,79 @@ uint8_t computeCRC8(const uint8_t* data, size_t length) {
     return crc;
 }
 
+bool waitForRisingEdge() {
+    constexpr int MAX_ATTEMPTS = 10000;
+    int attempts = 0;
 
-void pulseSymbol(uint8_t symbol) {
+    uint8_t currentState = 0;
+    {
+        std::lock_guard<std::mutex> lock(drvMutex);
+        currentState = drv.getRegister(&PINA) & RX_CLOCK_BIT;
+    }
+
+    while (currentState != 0 && attempts < MAX_ATTEMPTS && running) {
+        drv.delay_ms(1);
+        std::lock_guard<std::mutex> lock(drvMutex);
+        currentState = drv.getRegister(&PINA) & RX_CLOCK_BIT;
+        attempts++;
+    }
+
+    if (attempts >= MAX_ATTEMPTS) return false;
+
+    attempts = 0;
+    while (currentState == 0 && attempts < MAX_ATTEMPTS && running) {
+        drv.delay_ms(1);
+        std::lock_guard<std::mutex> lock(drvMutex);
+        currentState = drv.getRegister(&PINA) & RX_CLOCK_BIT;
+        attempts++;
+    }
+
+    return attempts < MAX_ATTEMPTS;
+}
+
+void sendSymbolClocked(uint8_t symbol) {
     std::lock_guard<std::mutex> lock(drvMutex);
-    uint8_t data = symbol & TX_DATA_MASK;
+    uint8_t data = symbol & TX_DATA_BITS;
     uint8_t current = drv.getRegister(&PORTA);
 
-    uint8_t out = (current & 0xF0) | data;
+    uint8_t out = (current & INPUT_MASK) | data;
     drv.setRegister(&PORTA, out);
     drv.delay_us(50);
 
     out |= TX_CLOCK_BIT;
-    drv.setRegister(&PORTA, out); // clock mit fentanyl (HIGh)
+    drv.setRegister(&PORTA, out);
     drv.delay_us(50);
 
     out &= ~TX_CLOCK_BIT;
-    drv.setRegister(&PORTA, out); // clock sucht nach fentanyl (low)
+    drv.setRegister(&PORTA, out);
     drv.delay_us(50);
 }
 
+uint8_t recvSymbolClocked() {
+    if (!waitForRisingEdge()) {
+        return 0;
+    }
 
-void modulate(uint8_t byte) {
+    std::lock_guard<std::mutex> lock(drvMutex);
+    uint8_t pins = drv.getRegister(&PINA);
+    uint8_t symbol = (pins & RX_DATA_BITS) >> RX_DATA_SHIFT;
+    return symbol;
+}
+
+void encodeByte(uint8_t byte) {
     uint8_t s0 = (byte >> 5) & 0x07;
     uint8_t s1 = (byte >> 2) & 0x07;
     uint8_t s2 = (byte & 0x03) | 0x04;
 
-    pulseSymbol(s0);
-    pulseSymbol(s1);
-    pulseSymbol(s2);
+    sendSymbolClocked(s0);
+    sendSymbolClocked(s1);
+    sendSymbolClocked(s2);
 }
 
-uint8_t demodulate() {
-    uint8_t s0, s1, s2;
-    {
-        std::lock_guard<std::mutex> lock(drvMutex);
-        drv.delay_ms(2);
-        s0 = (drv.getRegister(&PINA) >> RX_DATA_SHIFT) & TX_DATA_MASK;
-        drv.delay_ms(2);
-        s1 = (drv.getRegister(&PINA) >> RX_DATA_SHIFT) & TX_DATA_MASK;
-        drv.delay_ms(2);
-        s2 = (drv.getRegister(&PINA) >> RX_DATA_SHIFT) & TX_DATA_MASK;
-    }
+uint8_t decodeByte() {
+    uint8_t s0 = recvSymbolClocked();
+    uint8_t s1 = recvSymbolClocked();
+    uint8_t s2 = recvSymbolClocked();
 
     uint8_t byte = 0;
     byte |= (s0 & 0x07) << 5;
@@ -104,19 +139,11 @@ uint8_t demodulate() {
     return byte;
 }
 
-
-bool hasData() {
-    std::lock_guard<std::mutex> lock(drvMutex);
-    uint8_t pins = drv.getRegister(&PINA);
-    return (pins != 0);
-}
-
 bool isControlFrame(uint8_t byte) {
     return (byte == static_cast<uint8_t>(FrameType::START) ||
             byte == static_cast<uint8_t>(FrameType::END) ||
             byte == static_cast<uint8_t>(FrameType::ACK) ||
-            byte == static_cast<uint8_t>(FrameType::NAK) ||
-            byte == static_cast<uint8_t>(FrameType::REQ));
+            byte == static_cast<uint8_t>(FrameType::NAK));
 }
 
 void sendBlock(const Block& block) {
@@ -125,22 +152,22 @@ void sendBlock(const Block& block) {
     constexpr int MAX_RETRIES = 5;
 
     while (!acked && retries < MAX_RETRIES && running) {
-        modulate(block.seqNum);
-        modulate(static_cast<uint8_t>(block.data.size()));
+        encodeByte(block.seqNum);
+        encodeByte(static_cast<uint8_t>(block.data.size()));
 
         for (uint8_t byte : block.data) {
-            modulate(byte);
+            encodeByte(byte);
         }
 
         uint8_t crc = computeCRC8(block.data.data(), block.data.size());
-        modulate(crc);
+        encodeByte(crc);
 
         auto startTime = std::chrono::steady_clock::now();
         bool timedOut = false;
 
         while (!timedOut && running) {
-            if (hasData()) {
-                uint8_t response = demodulate();
+            if (waitForRisingEdge()) {
+                uint8_t response = decodeByte();
 
                 if (response == static_cast<uint8_t>(FrameType::ACK)) {
                     acked = true;
@@ -159,8 +186,6 @@ void sendBlock(const Block& block) {
                 retries++;
                 std::cerr << "[TX] Timeout, retry " << retries << "\n";
             }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
 
@@ -188,7 +213,7 @@ void transmitThread() {
             lock.unlock();
 
             if (isControlFrame(block.seqNum)) {
-                modulate(block.seqNum);
+                encodeByte(block.seqNum);
             } else {
                 sendBlock(block);
             }
@@ -206,12 +231,11 @@ void receiveThread() {
     bool inTransmission = false;
 
     while (running) {
-        if (!hasData()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        if (!waitForRisingEdge()) {
             continue;
         }
 
-        uint8_t byte = demodulate();
+        uint8_t byte = decodeByte();
 
         if (byte == static_cast<uint8_t>(FrameType::START)) {
             inTransmission = true;
@@ -235,40 +259,28 @@ void receiveThread() {
         if (inTransmission && !isControlFrame(byte)) {
             uint8_t seqNum = byte;
 
-            while (!hasData() && running) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            if (!running) break;
-
-            uint8_t blockSize = demodulate();
+            if (!waitForRisingEdge() || !running) break;
+            uint8_t blockSize = decodeByte();
 
             std::vector<uint8_t> blockData;
             blockData.reserve(blockSize);
 
             for (uint8_t i = 0; i < blockSize; i++) {
-                while (!hasData() && running) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                }
-                if (!running) break;
-
-                uint8_t dataByte = demodulate();
+                if (!waitForRisingEdge() || !running) break;
+                uint8_t dataByte = decodeByte();
                 blockData.push_back(dataByte);
             }
 
-            while (!hasData() && running) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-            if (!running) break;
-
-            uint8_t receivedCRC = demodulate();
+            if (!waitForRisingEdge() || !running) break;
+            uint8_t receivedCRC = decodeByte();
             uint8_t computedCRC = computeCRC8(blockData.data(), blockData.size());
 
             if (receivedCRC == computedCRC && blockData.size() == blockSize) {
                 buffer.insert(buffer.end(), blockData.begin(), blockData.end());
-                modulate(static_cast<uint8_t>(FrameType::ACK));
+                encodeByte(static_cast<uint8_t>(FrameType::ACK));
             } else {
                 std::cerr << "[RX] Block " << (int)seqNum << " CRC fehler\n";
-                modulate(static_cast<uint8_t>(FrameType::NAK));
+                encodeByte(static_cast<uint8_t>(FrameType::NAK));
             }
         }
     }
