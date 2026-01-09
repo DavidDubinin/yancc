@@ -1,6 +1,6 @@
 #include <iostream>
-#include "fake15f.h"
-//#include <b15f/b15f.h>
+//#include "fake15f.h"
+#include <b15f/b15f.h>
 #include <cstdint>
 #include <vector>
 #include <thread>
@@ -41,6 +41,12 @@ struct Block {
 void setup() {
     drv.setRegister(&DDRA, OUTPUT_MASK);
     drv.delay_ms(100);
+}
+
+void clear() {
+    std::lock_guard<std::mutex> lock(drvMutex);
+    drv.setRegister(&PORTA, 0x00);
+    drv.delay_ms(50);
 }
 
 uint8_t computeCRC8(const uint8_t* data, size_t length) {
@@ -353,6 +359,8 @@ int main() {
 
     if (txThread.joinable()) txThread.join();
     if (rxThread.joinable()) rxThread.join();
+
+    clear();
 
     std::cerr << "[YANCC] windows xp wird geruntergerfahren\n";
 
